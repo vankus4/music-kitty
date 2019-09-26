@@ -1,0 +1,2 @@
+# music-kitty
+discord bot
