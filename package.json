@@ -4,14 +4,13 @@
   "description": "A test discord bot for the nodejs class.",
   "main": "bot.js",
   "dependencies": {
-    "discord.js": "^11.3.2",
-    "ffmpeg-binaries": "^3.2.2",
+    "discord.js": "^11.5.1",
     "forever": "^0.15.3",
-    "npm": "^6.11.3",
+    "npm": "^6.13.4",
     "opusscript": "0.0.6",
     "system-sleep": "^1.3.6",
-    "youtube-search": "^1.0.10",
-    "ytdl-core": "^1.0.0"
+    "youtube-search": "^1.1.4",
+    "ytdl-core": "^1.0.6"
   },
   "devDependencies": {},
   "scripts": {

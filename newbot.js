@@ -6,7 +6,6 @@ const {
     get
 } = require("snekfetch"); // to make simple get requests
 let fs = require("fs"); // to check if a file exists
-let sleep = require('system-sleep') // to add delays
 
 const client = new Discord.Client();
 const maxVolume = 100;
@@ -127,22 +126,29 @@ client.login(botsettings.botToken);
 const commands = {
     'yt': (msg) => { // searches for the songs url and adds it to the queue
         let url = msg.content.substring(4);
+        let timestamp = 0;
+        if(url.includes("t=")){
+            let parameter = url.substring(url.indexOf("t=")).split(" ")[0]
+            timestamp = parameter.substring(2)
+            url = url.replace(parameter, "")
+            console.log("timestamp: " + timestamp)
+        }
         if (url == '' || url === undefined) return msg.channel.send(`You must add a YouTube video url, or id after ${botsettings.prefix}yt`);
         if (!url.startsWith("https://www.youtube.com/watch?v=") && !url.startsWith("https://www.youtu.be/")) {
-            console.log(url);
-            console.log("searching by keywords");
             var opts = {
                 maxResults: 1,
-                key: botsettings.apikey
+                key: botsettings.apikey,
+                type: "video"
             };
             search(url, opts, function (err, results) {
-                if (err != null) return msg.channel.send(err);
+                if (err != null) return msg.channel.send("oi" + err);
                 if (!results.length) return msg.channel.send("no such link exists");
                 if (!results[0].hasOwnProperty("link")) return msg.channel.send("the link doesn't have a link property");
                 connectedChannels[msg.guild.id].queue.push({
                     url: results[0].link,
                     title: results[0].title,
-                    requester: msg.author.username
+                    requester: msg.author.username,
+                    timestamp: timestamp
                 });
                 play(msg); // starts the queue
             });
@@ -167,6 +173,14 @@ const commands = {
         msg.channel.send(`__**${msg.guild.name}'s Music Queue:**__ Currently **${tosend.length}** songs queued ${(tosend.length > 15 ? '*[Only next 15 shown]*' : '')}\n\`\`\`${tosend.slice(0, 15).join('\n')}\`\`\``);
     },
     'vol': (msg) => {
+        if (!connectedChannels[msg.guild.id].isPlaying) {
+            changeVol(msg);
+        }
+    },
+    'mute': (msg) => {
+        
+    },
+    'unmute': (msg) => {
         if (!connectedChannels[msg.guild.id].isPlaying) {
             changeVol(msg);
         }
@@ -258,6 +272,9 @@ const commands = {
             });
             play(msg); // starts the queue
         });
+    },
+    "": (msg) => {
+        msg.channel.send("ste prijebaní?");
     }
 };
 
@@ -285,7 +302,6 @@ function voiceConnect(voiceChannel) { // works for both join(msg) and follow(new
 
 function playSound(msg, pathToFile) {
     if (!fs.existsSync(pathToFile)) {
-        msg.channel.send("fak u " + msg.member.nickname + " k?");
         console.log("file not found (" + pathToFile + ")");
         return;
     }
@@ -316,52 +332,56 @@ function sendFile(msg, pathToFile) {
     }).then(() => {
         msg.channel.stopTyping();
     }).catch(err => {
+        console.log(err);
         msg.channel.stopTyping();
     });
 }
 
 function play(msg) {
     if (!msg.guild.voiceConnection) return follow(msg.member).then(() => play(msg)).catch(err => {console.log(err);}); // if not connected to a voice channel (any), connect and rerun the play command
-    if (connectedChannels[msg.guild.id].isPlaying) return console.log("already playing"); //msg.channel.send('Already Playing'); // if playing, end here
+    if (connectedChannels[msg.guild.id].isPlaying) return;// console.log("already playing"); //msg.channel.send('Already Playing'); // if playing, end here
 
-    let dispatcher;
     connectedChannels[msg.guild.id].isPlaying = true;
 
     (function pray(song) {
         if (song === undefined) {
             console.log("Queue is empty");
-            // msg.channel.send("Kokot Koniec");
             connectedChannels[msg.guild.id].isPlaying = false;
             return;
         }
         console.log(song);
-        dispatcher = msg.guild.voiceConnection.playStream(yt(song.url, {
-            audioonly: true
+        let dispatcher = msg.guild.voiceConnection.playStream(yt(song.url, {
+            //audioonly: true
         }), {
+            volume: connectedChannels[msg.guild.id].volume / 100,
+            bitrate: 48000,
+            seek: song.timestamp //start playing from 0th second
             //passes: botsettings.passes
-        }); // dispatcher plays the song
+        });
         dispatcher.player.streamingData.pausedTime = 0;
         console.log("paused time: " + dispatcher.player.streamingData.pausedTime);
         let stop = false;
         let leave = false;
-        dispatcher.setVolume(connectedChannels[msg.guild.id].volume / 100); // sets volume
+        //dispatcher.setVolume(connectedChannels[msg.guild.id].volume / 100); // sets volume
 
         connectedChannels[msg.guild.id].isPlaying = true;
         let collector = msg.channel.createCollector(m => m); // separate command handler active only during the songplay
         collector.on('collect', m => {
             let isACommand = true;
             if (m.content.startsWith(botsettings.prefix + 'pause')) {
-                msg.channel.send('paused').then(() => {
+                client.user.setActivity("paused").then(() => {
                     dispatcher.pause();
                 });
             } else if (m.content.startsWith(botsettings.prefix + 'resume')) {
-                msg.channel.send('resumed').then(() => {
+                client.user.setActivity("").then(() => {
                     dispatcher.resume();
                 });
             } else if (m.content.startsWith(botsettings.prefix + 'skip')) {
                 msg.channel.send('skipped').then(() => {
                     dispatcher.end();
                 });
+            } else if (m.content.startsWith(botsettings.prefix + 'bitbox')) {
+                dispatcher.setBitrate(8);
             }
             // else if (m.content.startsWith(botsettings.prefix + 'stop')) {
             //     stop = true;
@@ -385,7 +405,7 @@ function play(msg) {
             }
         });
         dispatcher.on('end', () => { // when the current song ends
-            console.log("dispatcher end");
+            client.user.setActivity("")
             collector.stop(); // stops listening to extra commands
             connectedChannels[msg.guild.id].isPlaying = false; // enables the command.vol(msg)
             if (!stop)
