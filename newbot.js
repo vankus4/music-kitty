@@ -1,9 +1,9 @@
 const Discord = require("discord.js"); // main purpose
 const yt = require("ytdl-core"); // to get information about a video from yt url
-var search = require('youtube-search'); // to get video url from keywords using yt api
+const search = require('youtube-search'); // to get video url from keywords using yt api
 const botsettings = require("./newbotsettings");
 const { get } = require("snekfetch"); // to make simple get requests
-let fs = require("fs"); // to check if a file exists
+const fs = require("fs"); // to check if a file exists
 
 const client = new Discord.Client();
 const maxVolume = 100;
@@ -98,7 +98,8 @@ client.on("message", msg => {
     let commandName = msg.content.toLowerCase().slice(botsettings.prefix.length).split(' ')[0]; // get the command name
     if (commands.hasOwnProperty(commandName)) // if command exists and if is DJ or request is cat/dog
     {
-        console.log(msg.author.tag + ": " + msg.content); // output the msg to console
+        let currentdate = new Date()
+        console.log(`${currentdate.getHours()}:${currentdate.getMinutes()}:${currentdate.getSeconds()} ${msg.author.tag}: ${msg.content}`); // output the msg to console
         msg.delete().then(() => {
             createChannel(msg.guild);
             commands[commandName](msg); //execute respective command
@@ -130,7 +131,7 @@ const commands = {
 
         let timestamp = filterUrl(url)[1]
         url = filterUrl(url)[0]
-        console.log(url)
+        //console.log(url)
         if (!url.startsWith("https://www.youtube.com/watch?v=") && !url.startsWith("https://youtu.be/")) {
             console.log("not a link")
             var opts = {
@@ -140,6 +141,7 @@ const commands = {
             };
             search(url, opts, function (err, results) {
                 if (err != null) return msg.channel.send("yt search " + err);
+                //if (err != null) throw(err);
                 if (!results.length) return msg.channel.send("no such link exists");
                 if (!results[0].hasOwnProperty("link")) return msg.channel.send("the link doesn't have a link property");
                 connectedChannels[msg.guild.id].queue.push({
@@ -230,14 +232,13 @@ const commands = {
             });
     },
     "join": (msg) => {
-        const voiceChannel = msg.member.voiceChannel; // changed member to author so it can reply to DM
-        return voiceConnect(voiceChannel);
+        follow(msg.member)
     },
     "leave": (msg) => {
         if (!connectedChannels[msg.guild.id].isPlaying) { // if not playing
-            if (connectedChannels[msg.guild.id].hasOwnProperty("voiceChannel")) {
-                connectedChannels[msg.guild.id].voiceChannel.leave();
-                delete connectedChannels[msg.guild.id].voiceChannel;
+            if (connectedChannels[msg.guild.id].hasOwnProperty("connection")) {
+                connectedChannels[msg.guild.id].connection.channel.leave();
+                delete connectedChannels[msg.guild.id].connection;
                 printConnectedGuilds();
             } else {
                 // msg colector handles it
@@ -299,7 +300,7 @@ function voiceConnect(channel) { // works for both join(msg) and follow(newMembe
         channel.join().then(connection => {
             connection.on("error", (error) => {
                 console.log("voiceConnection emmited an error");
-                console.log(error);
+                reject(error);
             });
             connectedChannels[channel.guild.id].connection = connection; // adds this connection under the guild's ID string
             resolve(connection);
@@ -345,7 +346,7 @@ function sendFile(msg, pathToFile) {
 }
 
 function play(msg) {
-    if (!msg.guild.voice.connection) return follow(msg.member).then(() => play(msg)).catch(err => { console.log(err); }); // if not connected to a voice channel (any), connect and rerun the play command
+    if (!connectedChannels[msg.guild.id].connection) return follow(msg.member).then(connection => play(msg)).catch(err => console.log(err)) // if not connected to a voice channel (any), connect and rerun the play command
     if (connectedChannels[msg.guild.id].isPlaying) return;// console.log("already playing"); //msg.channel.send('Already Playing'); // if playing, end here
 
     connectedChannels[msg.guild.id].isPlaying = true;
