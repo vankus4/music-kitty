@@ -1,18 +1,17 @@
 const Discord = require("discord.js"); // main purpose
 const yt = require("ytdl-core"); // to get information about a video from yt url
 var search = require('youtube-search'); // to get video url from keywords using yt api
-const botsettings = require("./newbotsettings.json");
-const {
-    get
-} = require("snekfetch"); // to make simple get requests
+const botsettings = require("./newbotsettings");
+const { get } = require("snekfetch"); // to make simple get requests
 let fs = require("fs"); // to check if a file exists
 
 const client = new Discord.Client();
 const maxVolume = 100;
 let connectedChannels = {};
-const defaultVolume = 40;
+const defaultVolume = 10;
 const picExtensions = ["jpg", "png", "jpeg"];
 const sndExtensions = ["mp3", "wav", "ogg"];
+const filterUrl = require("./functions/filterUrl")
 
 process.stdin.resume(); //so the program will not close instantly
 function exitHandler(options, exitCode) {
@@ -39,8 +38,9 @@ client.on("ready", async () => {
     //https://discordapp.com/oauth2/authorize?client_id=424015462284918785&permissions=8&scope=bot
 });
 
-client.on("voiceStateUpdate", (oldMember, newMember) => {
-    if (newMember.id === botsettings.discordIds.vankus4 && newMember.selfMute && !newMember.deaf) {
+client.on("voiceStateUpdate", (oldState, newState) => {
+    let newMember = newState.member
+    if (newMember.id === botsettings.discordIds.vankus4 && newState.selfMute && !newState.deaf) {
         createChannel(newMember.guild);
         let number = Math.floor((Math.random() * 7))
         let name = "greevil " + number;
@@ -48,9 +48,9 @@ client.on("voiceStateUpdate", (oldMember, newMember) => {
         follow(newMember).then(() => {
             const activityName = name + "." + extension;
             client.user.setActivity(activityName).then(() => {
-                const dispatcher = newMember.guild.voiceConnection.playFile(__dirname + "/soundBoard/" + name + "." + extension);
+                console.log(connectedChannels[newMember.guild.id].volume)
+                const dispatcher = newMember.guild.voice.connection.play(__dirname + "/soundBoard/" + name + "." + extension, { volume: connectedChannels[newMember.guild.id].volume / 100 });
                 dispatcher.player.streamingData.pausedTime = 0;
-                dispatcher.setVolume(connectedChannels[newMember.guild.id].volume / 100); // sets volume
                 dispatcher.on('end', () => {
                     client.user.setActivity();
                 });
@@ -74,7 +74,7 @@ client.on("voiceStateUpdate", (oldMember, newMember) => {
             follow(newMember).then(() => {
                 const activityName = name + "." + extension;
                 client.user.setActivity(activityName).then(() => {
-                    const dispatcher = newMember.guild.voiceConnection.playFile(__dirname + "/soundBoard/" + name + "." + extension);
+                    const dispatcher = newMember.guild.voice.connection.playFile(__dirname + "/soundBoard/" + name + "." + extension);
                     dispatcher.player.streamingData.pausedTime = 0;
                     dispatcher.setVolume(connectedChannels[newMember.guild.id].volume / 100); // sets volume
                     dispatcher.on('end', () => {
@@ -126,22 +126,20 @@ client.login(botsettings.botToken);
 const commands = {
     'yt': (msg) => { // searches for the songs url and adds it to the queue
         let url = msg.content.substring(4);
-        let timestamp = 0;
-        if(url.includes("t=")){
-            let parameter = url.substring(url.indexOf("t=")).split(" ")[0]
-            timestamp = parameter.substring(2)
-            url = url.replace(parameter, "")
-            console.log("timestamp: " + timestamp)
-        }
-        if (url == '' || url === undefined) return msg.channel.send(`You must add a YouTube video url, or id after ${botsettings.prefix}yt`);
-        if (!url.startsWith("https://www.youtube.com/watch?v=") && !url.startsWith("https://www.youtu.be/")) {
+        if (url == '' || url === undefined) return msg.channel.send(`You must add a YouTube video url, or id after ${botsettings.prefix}yt`)
+
+        let timestamp = filterUrl(url)[1]
+        url = filterUrl(url)[0]
+        console.log(url)
+        if (!url.startsWith("https://www.youtube.com/watch?v=") && !url.startsWith("https://youtu.be/")) {
+            console.log("not a link")
             var opts = {
                 maxResults: 1,
                 key: botsettings.apikey,
                 type: "video"
             };
             search(url, opts, function (err, results) {
-                if (err != null) return msg.channel.send("oi" + err);
+                if (err != null) return msg.channel.send("yt search " + err);
                 if (!results.length) return msg.channel.send("no such link exists");
                 if (!results[0].hasOwnProperty("link")) return msg.channel.send("the link doesn't have a link property");
                 connectedChannels[msg.guild.id].queue.push({
@@ -159,7 +157,8 @@ const commands = {
                 connectedChannels[msg.guild.id].queue.push({
                     url: url,
                     title: info.title,
-                    requester: msg.author.username
+                    requester: msg.author.username,
+                    timestamp: timestamp
                 });
                 play(msg); // starts the queue
             });
@@ -178,7 +177,7 @@ const commands = {
         }
     },
     'mute': (msg) => {
-        
+
     },
     'unmute': (msg) => {
         if (!connectedChannels[msg.guild.id].isPlaying) {
@@ -196,7 +195,7 @@ const commands = {
         }
     },
     "cat": (msg) => {
-        msg.channel.startTyping();
+        msg.channel.startdng();
         get("http://aws.random.cat/meow") // uses snekfetch to make a get request
             .then(response => {
                 msg.channel.send({
@@ -251,6 +250,17 @@ const commands = {
         let result = msg.content.join(" ");
         msg.channel.send(result);
     },
+    "ratafak": (msg) => {
+        let url = "https://www.youtube.com/watch?v=_GkHtEcslb0";
+        yt.getInfo(url, (err, info) => {
+            connectedChannels[msg.guild.id].queue.push({
+                url: url,
+                title: info.title,
+                requester: msg.author.username
+            });
+            play(msg); // starts the queue
+        });
+    },
     "lego": (msg) => {
         let url = "https://www.youtube.com/watch?v=nhq-TbGJ5B8";
         yt.getInfo(url, (err, info) => {
@@ -279,23 +289,21 @@ const commands = {
 };
 
 function follow(newMember) {
-    const voiceChannel = newMember.voiceChannel; // changed member to author so it can reply to DM
+    const voiceChannel = newMember.voice.channel; // changed member to author so it can reply to DM
     return voiceConnect(voiceChannel);
 }
 
-function voiceConnect(voiceChannel) { // works for both join(msg) and follow(newMember)
+function voiceConnect(channel) { // works for both join(msg) and follow(newMember)
     return new Promise(function (resolve, reject) {
-        if (!voiceChannel || voiceChannel.type !== 'voice') return reject('I couldn\'t connect to your voice channel...');
-        voiceChannel.join().then(connection => {
-            connectedChannels[voiceChannel.guild.id].voiceChannel = voiceChannel; // adds this connection under the guild's ID string
-            printConnectedGuilds();
+        if (!channel || channel.type !== 'voice') return reject('I couldn\'t connect to your voice channel...');
+        channel.join().then(connection => {
             connection.on("error", (error) => {
                 console.log("voiceConnection emmited an error");
                 console.log(error);
             });
-            const receiver = connection.createReceiver();
-            connectedChannels[voiceChannel.guild.id].voiceChannel.receiver = receiver; // adds this connection under the guild's ID string
+            connectedChannels[channel.guild.id].connection = connection; // adds this connection under the guild's ID string
             resolve(connection);
+            printConnectedGuilds();
         }).catch(err => reject(err));
     });
 }
@@ -305,12 +313,11 @@ function playSound(msg, pathToFile) {
         console.log("file not found (" + pathToFile + ")");
         return;
     }
-    follow(msg.member).then(() => {
+    follow(msg.member).then((connection) => {
         const activityName = pathToFile.split("soundBoard/")[1];
         client.user.setActivity(activityName).then(() => {
-            const dispatcher = msg.guild.voiceConnection.playFile(pathToFile);
+            const dispatcher = msg.guild.voice.connection.play(pathToFile, { volume: connectedChannels[msg.guild.id].volume / 100 });
             dispatcher.player.streamingData.pausedTime = 0;
-            dispatcher.setVolume(connectedChannels[msg.guild.id].volume / 100); // sets volume
             dispatcher.on('end', () => {
                 client.user.setActivity();
             });
@@ -319,7 +326,7 @@ function playSound(msg, pathToFile) {
             });
         });
     }).catch((err) => {
-        msg.channel.send(err);
+        //msg.channel.send(err);
         console.log(err);
     });
 }
@@ -338,7 +345,7 @@ function sendFile(msg, pathToFile) {
 }
 
 function play(msg) {
-    if (!msg.guild.voiceConnection) return follow(msg.member).then(() => play(msg)).catch(err => {console.log(err);}); // if not connected to a voice channel (any), connect and rerun the play command
+    if (!msg.guild.voice.connection) return follow(msg.member).then(() => play(msg)).catch(err => { console.log(err); }); // if not connected to a voice channel (any), connect and rerun the play command
     if (connectedChannels[msg.guild.id].isPlaying) return;// console.log("already playing"); //msg.channel.send('Already Playing'); // if playing, end here
 
     connectedChannels[msg.guild.id].isPlaying = true;
@@ -350,7 +357,7 @@ function play(msg) {
             return;
         }
         console.log(song);
-        let dispatcher = msg.guild.voiceConnection.playStream(yt(song.url, {
+        let dispatcher = connectedChannels[msg.guild.id].connection.play(yt(song.url, {
             //audioonly: true
         }), {
             volume: connectedChannels[msg.guild.id].volume / 100,
@@ -365,7 +372,7 @@ function play(msg) {
         //dispatcher.setVolume(connectedChannels[msg.guild.id].volume / 100); // sets volume
 
         connectedChannels[msg.guild.id].isPlaying = true;
-        let collector = msg.channel.createCollector(m => m); // separate command handler active only during the songplay
+        let collector = msg.channel.createMessageCollector(m => m); // filter needs a nonempty message
         collector.on('collect', m => {
             let isACommand = true;
             if (m.content.startsWith(botsettings.prefix + 'pause')) {
@@ -377,7 +384,10 @@ function play(msg) {
                     dispatcher.resume();
                 });
             } else if (m.content.startsWith(botsettings.prefix + 'skip')) {
-                msg.channel.send('skipped').then(() => {
+                msg.channel.send('skipped').then((replyMsg) => {
+                    setTimeout(() => {
+                        replyMsg.delete();
+                    }, 5000);
                     dispatcher.end();
                 });
             } else if (m.content.startsWith(botsettings.prefix + 'bitbox')) {
@@ -388,7 +398,7 @@ function play(msg) {
             //     msg.channel.send('stopping').then(() => { dispatcher.end(); });
             // }
             else if (m.content.startsWith(botsettings.prefix + "url")) {
-                msg.channel.send(song.url);
+                msg.channel.send(song.url + " requested by: " + song.requester);
             } else if (m.content.startsWith(botsettings.prefix + "leave")) {
                 stop = true;
                 leave = true;
@@ -430,26 +440,36 @@ function play(msg) {
 }
 
 function printConnectedGuilds() {
-    let eachChannel = [];
+    let connections = [];
     Object.keys(connectedChannels).forEach(channel => {
-        if (connectedChannels[channel].voiceChannel)
-            eachChannel.push(connectedChannels[channel].voiceChannel.guild.name);
+        if (connectedChannels[channel].connection)
+            connections.push(connectedChannels[channel].connection.voice.guild.name);
     });
-    console.log("connected channels: " + eachChannel.join(" | "));
+    console.log("connected channels: " + connections.join(" | "));
 }
 
 function changeVol(msg) {
     let volume = Number(msg.content.split(' ')[1]);
     if (isNaN(volume)) {
-        return msg.channel.send("the volume must be a number!");
-    }
-    if (volume >= 0 && volume <= maxVolume) {
+        msg.channel.send("current volume: " + connectedChannels[msg.guild.id].volume).then(replyMsg => {
+            setTimeout(() => {
+                replyMsg.delete();
+            }, 5000);
+        })
+        //return msg.channel.send("the volume must be a number!");
+    } else if (volume >= 0 && volume <= maxVolume) {
         connectedChannels[msg.guild.id].volume = volume;
-        msg.channel.send("volume set to " + volume).then(() => {
-            return true
-        });
+        msg.channel.send("volume set to " + volume).then(replyMsg => {
+            setTimeout(() => {
+                replyMsg.delete();
+            }, 5000);
+        })
     } else {
-        msg.channel.send("the volume must be a number between 0 and " + maxVolume);
+        msg.channel.send("the volume must be a number between 0 and " + maxVolume).then(replyMsg => {
+            setTimeout(() => {
+                replyMsg.delete();
+            }, 5000);
+        })
     }
 }
 
