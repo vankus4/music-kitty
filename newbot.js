@@ -48,10 +48,9 @@ client.on("voiceStateUpdate", (oldState, newState) => {
         follow(newMember).then(() => {
             const activityName = name + "." + extension;
             client.user.setActivity(activityName).then(() => {
-                console.log(connectedChannels[newMember.guild.id].volume)
                 const dispatcher = newMember.guild.voice.connection.play(__dirname + "/soundBoard/" + name + "." + extension, { volume: connectedChannels[newMember.guild.id].volume / 100 });
                 dispatcher.player.streamingData.pausedTime = 0;
-                dispatcher.on('end', () => {
+                dispatcher.on('finish', () => {
                     client.user.setActivity();
                 });
                 dispatcher.on('error', e => {
@@ -77,7 +76,7 @@ client.on("voiceStateUpdate", (oldState, newState) => {
                     const dispatcher = newMember.guild.voice.connection.playFile(__dirname + "/soundBoard/" + name + "." + extension);
                     dispatcher.player.streamingData.pausedTime = 0;
                     dispatcher.setVolume(connectedChannels[newMember.guild.id].volume / 100); // sets volume
-                    dispatcher.on('end', () => {
+                    dispatcher.on('finish', () => {
                         client.user.setActivity();
                     });
                     dispatcher.on('error', e => {
@@ -133,7 +132,7 @@ const commands = {
         url = filterUrl(url)[0]
         //console.log(url)
         if (!url.startsWith("https://www.youtube.com/watch?v=") && !url.startsWith("https://youtu.be/")) {
-            console.log("not a link")
+            console.log("searching by keywords")
             var opts = {
                 maxResults: 1,
                 key: botsettings.apikey,
@@ -153,7 +152,7 @@ const commands = {
                 play(msg); // starts the queue
             });
         } else {
-            console.log("link provided");
+            console.log("searching by URL");
             yt.getInfo(url, (err, info) => {
                 if (err) return console.log(err);
                 connectedChannels[msg.guild.id].queue.push({
@@ -319,7 +318,7 @@ function playSound(msg, pathToFile) {
         client.user.setActivity(activityName).then(() => {
             const dispatcher = msg.guild.voice.connection.play(pathToFile, { volume: connectedChannels[msg.guild.id].volume / 100 });
             dispatcher.player.streamingData.pausedTime = 0;
-            dispatcher.on('end', () => {
+            dispatcher.on('finish', () => {
                 client.user.setActivity();
             });
             dispatcher.on('error', e => {
@@ -363,14 +362,13 @@ function play(msg) {
         }), {
             volume: connectedChannels[msg.guild.id].volume / 100,
             bitrate: 48000,
-            seek: song.timestamp //start playing from 0th second
+            seek: song.timestamp // from which second to start
             //passes: botsettings.passes
         });
-        dispatcher.player.streamingData.pausedTime = 0;
-        console.log("paused time: " + dispatcher.player.streamingData.pausedTime);
+        //dispatcher.player.streamingData.pausedTime = 0;
+        //console.log("paused time: " + dispatcher.player.streamingData.pausedTime);
         let stop = false;
         let leave = false;
-        //dispatcher.setVolume(connectedChannels[msg.guild.id].volume / 100); // sets volume
 
         connectedChannels[msg.guild.id].isPlaying = true;
         let collector = msg.channel.createMessageCollector(m => m); // filter needs a nonempty message
@@ -403,7 +401,10 @@ function play(msg) {
             } else if (m.content.startsWith(botsettings.prefix + "leave")) {
                 stop = true;
                 leave = true;
-                msg.channel.send('stopping').then(() => {
+                msg.channel.send('stopping').then((replyMsg) => {
+                    setTimeout(() => {
+                        replyMsg.delete();
+                    }, 5000);
                     dispatcher.end();
                 });
             } else if (m.content.startsWith(botsettings.prefix + 'vol')) {
@@ -412,16 +413,20 @@ function play(msg) {
             } else isACommand = false;
             if (isACommand && !commands.hasOwnProperty(m.content.toLowerCase().slice(botsettings.prefix.length).split(' ')[0])) {
                 m.delete();
-                console.log(m.author.tag + ": " + m.content); // output the msg to console
+                let currentdate = new Date()
+                console.log(`${currentdate.getHours()}:${currentdate.getMinutes()}:${currentdate.getSeconds()} ${m.author.tag}: ${m.content}`); // output the msg to console
             }
         });
-        dispatcher.on('end', () => { // when the current song ends
+        dispatcher.on('finish', () => { // when the current song ends
             client.user.setActivity("")
             collector.stop(); // stops listening to extra commands
             connectedChannels[msg.guild.id].isPlaying = false; // enables the command.vol(msg)
-            if (!stop)
-                pray(connectedChannels[msg.guild.id].queue.shift()); // moves the queue
+            if (!stop) {
+                pray(connectedChannels[msg.guild.id].queue.shift());
+                console.log("shifting to the next song")
+            } // moves the queue
             else {
+                console.log("queue empty")
                 connectedChannels[msg.guild.id].queue = [];
                 stop = false;
             }
@@ -444,7 +449,7 @@ function printConnectedGuilds() {
     let connections = [];
     Object.keys(connectedChannels).forEach(channel => {
         if (connectedChannels[channel].connection)
-            connections.push(connectedChannels[channel].connection.voice.guild.name);
+            connections.push(connectedChannels[channel].connection.channel.guild.name);
     });
     console.log("connected channels: " + connections.join(" | "));
 }
