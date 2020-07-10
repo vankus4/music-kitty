@@ -299,6 +299,7 @@ function voiceConnect(channel) { // works for both join(msg) and follow(newMembe
         channel.join().then(connection => {
             connection.on("error", (error) => {
                 console.log("voiceConnection emmited an error");
+                console.log(error);
                 reject(error);
             });
             connectedChannels[channel.guild.id].connection = connection; // adds this connection under the guild's ID string
